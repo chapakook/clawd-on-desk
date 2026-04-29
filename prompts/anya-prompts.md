@@ -39,21 +39,19 @@ fail: exit 1 — "N error(s)"
 ## How to Use
 
 1. Open ChatGPT with Images 2.0 enabled
-2. For each asset below, copy the **Base Style** block + the state's **Prompt Addition**
-3. Generate → download as PNG
-4. For animated states: generate 4–6 frames with slightly varied poses
-5. Assemble frames into GIF (see GIF Assembly below)
-6. Place file at the listed **Target path**
-7. Run validation: `node scripts/validate-theme.js ./themes/anya`
-8. Repeat until all required assets are placed
+2. For each asset below, generate **8 separate PNG images** using the per-frame prompts
+3. Assemble 8 frames into GIF (see GIF Assembly below)
+4. Place file at the listed **Target path**
+5. Run validation: `node scripts/validate-theme.js ./themes/anya`
+6. Repeat for each asset
 
-**Priority order:** Start with `idle.png`, `thinking.gif`, `typing.gif` — these are required. Then add the rest.
+**Priority order:** Start with `idle.gif`, `thinking.gif`, `typing.gif` — these are required. Then add the rest.
 
 ---
 
 ## Base Style
 
-Copy this into **every** prompt:
+Copy this into **every** prompt (replace `[BASE STYLE]`):
 
 ```
 Anya Forger from Spy x Family anime, chibi pixel art style,
@@ -68,13 +66,14 @@ simple clean lines, limited color palette, no background
 
 **Option A — ezgif.com (no install):**
 1. Go to https://ezgif.com/maker
-2. Upload frames (PNG), set delay to 25 (= 4fps), click "Make GIF"
-3. Download and rename
+2. Upload 8 frames (PNG) in order
+3. Set delay to `12` (= ~8fps), click "Make GIF"
+4. Download and rename
 
 **Option B — ffmpeg:**
 ```bash
-# frames named frame1.png, frame2.png, ...
-ffmpeg -framerate 4 -i frame%d.png -vf "scale=200:200" output.gif
+# frames named frame1.png, frame2.png, ... frame8.png
+ffmpeg -framerate 8 -i frame%d.png -vf "scale=200:200" output.gif
 ```
 
 ---
@@ -93,48 +92,138 @@ node scripts/validate-theme.js ./themes/anya
 
 ---
 
-#### `idle.png` — static PNG
-**Target:** `themes/anya/assets/idle.png`
-**Format:** PNG (static, no animation)
+#### `idle.gif` — animated GIF, 8 frames
+**Target:** `themes/anya/assets/idle.gif`
+**Format:** GIF, 8 frames @ 8fps (looping blink)
 **When used:** Default resting state
 
-**Prompt:**
+| Frame | Description |
+|-------|-------------|
+| 1 | Eyes fully open, neutral smile, relaxed pose |
+| 2 | Eyes fully open (same as 1 — hold) |
+| 3 | Eyes half-closed, beginning blink |
+| 4 | Eyes fully closed |
+| 5 | Eyes opening, half-open |
+| 6 | Eyes fully open, neutral smile |
+| 7 | Eyes fully open (same as 6 — hold) |
+| 8 | Eyes fully open (same as 6 — hold longer) |
+
+**Per-frame prompts:**
+
+Frame 1–2 & 6–8:
 ```
 [BASE STYLE]
-neutral expression, slight smile, standing relaxed, arms loosely at sides,
-eyes open and looking forward, calm and content
+neutral relaxed expression, slight smile, standing still,
+eyes fully open looking forward, calm resting pose
+```
+
+Frame 3:
+```
+[BASE STYLE]
+neutral relaxed expression, slight smile, standing still,
+eyes one-third closed in slow blink, calm resting pose
+```
+
+Frame 4:
+```
+[BASE STYLE]
+neutral relaxed expression, slight smile, standing still,
+eyes fully closed in blink, calm resting pose
+```
+
+Frame 5:
+```
+[BASE STYLE]
+neutral relaxed expression, slight smile, standing still,
+eyes half-open reopening from blink, calm resting pose
 ```
 
 ---
 
-#### `thinking.gif` — animated GIF, 4 frames
+#### `thinking.gif` — animated GIF, 8 frames
 **Target:** `themes/anya/assets/thinking.gif`
-**Format:** GIF, 4 frames @ 4fps
+**Format:** GIF, 8 frames @ 8fps
 **When used:** Agent is processing / thinking
 
-**Prompt:**
+| Frame | Description |
+|-------|-------------|
+| 1 | Arms at sides, eyes forward, neutral |
+| 2 | Right hand begins rising |
+| 3 | Right hand near shoulder, eyes shift left |
+| 4 | Right hand at chin, eyes upper-left |
+| 5 | Hand at chin, eyes shift to upper-right |
+| 6 | Hand at chin, eyes return center, slight head tilt |
+| 7 | Hand at chin (hold), eyebrows furrowed |
+| 8 | Same as frame 7 (hold) |
+
+**Per-frame prompts:**
+
+Frame 1:
 ```
 [BASE STYLE]
-furrowed brows, one hand raised to chin in thinking pose,
-eyes looking upward-left, slight head tilt, concentrated expression
+neutral expression, arms relaxed at sides, eyes looking forward
 ```
-Frames: hand moves slightly toward chin, eyes shift left then right
+Frame 2:
+```
+[BASE STYLE]
+curious expression, right hand beginning to rise toward face, eyes forward
+```
+Frame 3:
+```
+[BASE STYLE]
+thinking expression, right hand near shoulder level, eyes shifting left
+```
+Frame 4–5:
+```
+[BASE STYLE]
+furrowed brows, right hand raised to chin in thinking pose,
+eyes looking upward-left, concentrated expression
+```
+Frame 6–8:
+```
+[BASE STYLE]
+furrowed brows, right hand on chin, slight head tilt to the right,
+eyes looking forward-slightly-down, deep in thought
+```
 
 ---
 
-#### `typing.gif` — animated GIF, 4 frames
+#### `typing.gif` — animated GIF, 8 frames
 **Target:** `themes/anya/assets/typing.gif`
-**Format:** GIF, 4 frames @ 4fps
+**Format:** GIF, 8 frames @ 8fps
 **When used:** 1 active agent session working
 
-**Prompt:**
+| Frame | Description |
+|-------|-------------|
+| 1 | Left hand raised high, right hand lowered |
+| 2 | Left hand mid, right hand mid (crossing) |
+| 3 | Left hand lowered, right hand raised high |
+| 4 | Left hand mid, right hand mid (crossing) |
+| 5 | Left hand raised high, right hand lowered |
+| 6 | Left hand mid, right hand mid |
+| 7 | Left hand lowered, right hand raised high |
+| 8 | Left hand mid, right hand mid |
+
+**Per-frame prompts:**
+
+Frames 1, 5 (left up):
 ```
 [BASE STYLE]
-excited eager expression, leaning slightly forward,
-both hands raised and moving as if typing rapidly,
-wide open eyes, energetic focused pose
+excited eager expression, leaning slightly forward, wide open eyes,
+left hand raised high in typing motion, right hand lowered, energetic pose
 ```
-Frames: hands alternate up/down
+Frames 3, 7 (right up):
+```
+[BASE STYLE]
+excited eager expression, leaning slightly forward, wide open eyes,
+right hand raised high in typing motion, left hand lowered, energetic pose
+```
+Frames 2, 4, 6, 8 (both mid):
+```
+[BASE STYLE]
+excited eager expression, leaning slightly forward, wide open eyes,
+both hands at mid-level in typing motion, energetic focused pose
+```
 
 ---
 
@@ -142,116 +231,298 @@ Frames: hands alternate up/down
 
 ---
 
-#### `building.gif` — animated GIF, 4 frames
+#### `building.gif` — animated GIF, 8 frames
 **Target:** `themes/anya/assets/building.gif`
-**Format:** GIF, 4 frames @ 4fps
+**Format:** GIF, 8 frames @ 8fps
 **When used:** 3+ active agent sessions (workingTiers)
 
-**Prompt:**
+| Frame | Description |
+|-------|-------------|
+| 1–2 | Wrench held up, determined face |
+| 3–4 | Wrench swings down-right |
+| 5–6 | Wrench at lowest point |
+| 7–8 | Wrench swings back up |
+
+**Per-frame prompts:**
+
+Frames 1–2:
 ```
 [BASE STYLE]
-determined serious expression, holding a small wrench in one hand,
-focused eyes slightly narrowed, leaning forward with purpose,
-construction or tool-use pose
+determined serious expression, right hand raised holding a small wrench above head,
+focused eyes slightly narrowed, construction working pose
 ```
-Frames: wrench moves in small arc
+Frames 3–4:
+```
+[BASE STYLE]
+determined expression, right hand swinging wrench downward to the right,
+focused eyes, mid-swing construction pose
+```
+Frames 5–6:
+```
+[BASE STYLE]
+determined expression, right hand holding wrench at lowest point,
+arms slightly extended, construction working pose
+```
+Frames 7–8:
+```
+[BASE STYLE]
+determined expression, right hand swinging wrench back upward,
+focused eyes, return swing construction pose
+```
 
 ---
 
-#### `juggling.gif` — animated GIF, 6 frames
+#### `juggling.gif` — animated GIF, 8 frames
 **Target:** `themes/anya/assets/juggling.gif`
-**Format:** GIF, 6 frames @ 6fps
-**When used:** 2+ active agent sessions (workingTiers + jugglingTiers)
+**Format:** GIF, 8 frames @ 8fps
+**When used:** 2+ active agent sessions
 
-**Prompt:**
+| Frame | Description |
+|-------|-------------|
+| 1 | Left hand high, orb above left hand |
+| 2 | Orb at peak left, right orb rising |
+| 3 | Center orb at top, both hands mid |
+| 4 | Right orb at peak, left orb falling |
+| 5 | Right hand high, orb above right hand |
+| 6 | Orb falling right, left orb rising |
+| 7 | Center orb at top again |
+| 8 | Return to frame 1 position |
+
+**Per-frame prompts:**
+
+Frames 1, 5:
 ```
 [BASE STYLE]
-overwhelmed but determined expression, both hands raised,
-three small colorful glowing orbs floating in the air around her,
-slightly stressed wide eyes, mouth open in concentration
+overwhelmed but determined expression, one hand raised high,
+two colorful glowing orbs visible in the air, slightly stressed wide eyes
 ```
-Frames: orbs rotate in arc above hands, one hand slightly higher each frame
+Frames 3, 7:
+```
+[BASE STYLE]
+overwhelmed but determined expression, both hands at mid-level,
+three colorful glowing orbs in arc above her head, mouth open in concentration
+```
+Frames 2, 4, 6, 8:
+```
+[BASE STYLE]
+overwhelmed but focused expression, hands in motion,
+colorful orbs mid-arc in the air around her, stressed concentrated expression
+```
 
 ---
 
-#### `conducting.gif` — animated GIF, 4 frames
+#### `conducting.gif` — animated GIF, 8 frames
 **Target:** `themes/anya/assets/conducting.gif`
-**Format:** GIF, 4 frames @ 4fps
+**Format:** GIF, 8 frames @ 8fps
 **When used:** 2+ subagents (jugglingTiers override)
 
-**Prompt:**
+| Frame | Description |
+|-------|-------------|
+| 1–2 | Baton raised high, eyes closed |
+| 3–4 | Baton sweeps down-left |
+| 5–6 | Baton at lowest point, slight body lean |
+| 7–8 | Baton sweeps back up |
+
+**Per-frame prompts:**
+
+Frames 1–2:
 ```
 [BASE STYLE]
-commanding confident expression, one arm raised high holding a small baton,
-eyes closed in concentration, other hand extended outward,
-authoritative conductor pose
+commanding confident expression, right arm raised high holding a small baton,
+eyes closed in concentration, left hand extended outward, authoritative pose
 ```
-Frames: baton arm sweeps up then down, slight body sway
+Frames 3–4:
+```
+[BASE STYLE]
+commanding expression, right arm sweeping down-left with baton,
+eyes still closed, conducting motion mid-sweep
+```
+Frames 5–6:
+```
+[BASE STYLE]
+commanding expression, right arm at lowest point with baton,
+slight forward lean, conducting downbeat pose
+```
+Frames 7–8:
+```
+[BASE STYLE]
+commanding expression, right arm rising back upward with baton,
+eyes beginning to open, completing conducting upbeat
+```
 
 ---
 
-#### `happy.gif` — animated GIF, 6 frames
+#### `happy.gif` — animated GIF, 8 frames
 **Target:** `themes/anya/assets/happy.gif`
-**Format:** GIF, 6 frames @ 6fps
-**When used:** Attention / alert state (also used as attention fallback)
+**Format:** GIF, 8 frames @ 8fps
+**When used:** Attention / task complete state
 
-**Prompt:**
+| Frame | Description |
+|-------|-------------|
+| 1 | Arms beginning to raise, big smile forming |
+| 2 | Arms halfway up, smile wide |
+| 3 | Arms fully raised, eyes crescent with joy |
+| 4 | Sparkles appear around her |
+| 5 | Slight upward bounce, sparkles |
+| 6 | At peak of bounce, sparkles everywhere |
+| 7 | Coming back down, arms still raised |
+| 8 | Return to arms raised (loop) |
+
+**Per-frame prompts:**
+
+Frames 1–2:
 ```
 [BASE STYLE]
-huge open smile, both arms raised up in celebration,
-sparkles and small stars around her, eyes crescent-shaped from joy,
-slight bounce or jump, extremely happy expression
+huge open smile, arms rising upward, eyes wide with excitement,
+happy celebratory expression beginning
 ```
-Frames: arms go up, sparkles appear, small downward bounce, arms come back up
+Frames 3–4:
+```
+[BASE STYLE]
+huge open smile, both arms fully raised up in celebration,
+eyes crescent-shaped from joy, sparkles around her
+```
+Frames 5–6:
+```
+[BASE STYLE]
+extremely happy expression, both arms raised, slight upward jump,
+sparkles and small stars all around, eyes crescent with joy
+```
+Frames 7–8:
+```
+[BASE STYLE]
+huge open smile, both arms raised, coming back to ground,
+sparkles fading slightly, joyful celebratory pose
+```
 
 ---
 
-#### `notification.gif` — animated GIF, 4 frames
+#### `notification.gif` — animated GIF, 8 frames
 **Target:** `themes/anya/assets/notification.gif`
-**Format:** GIF, 4 frames @ 4fps
+**Format:** GIF, 8 frames @ 8fps
 **When used:** Incoming notification / permission request
 
-**Prompt:**
+| Frame | Description |
+|-------|-------------|
+| 1 | Neutral pose |
+| 2 | Eyes widening, slight backward lean |
+| 3 | Eyes fully wide, ! mark appearing |
+| 4 | ! mark fully visible, hand raised |
+| 5 | ! mark pulsing larger |
+| 6 | ! mark normal size, eyebrows raised high |
+| 7 | Slight forward lean returning |
+| 8 | Alert pose held |
+
+**Per-frame prompts:**
+
+Frame 1:
+```
+[BASE STYLE]
+neutral expression, arms relaxed, looking forward
+```
+Frames 2–3:
+```
+[BASE STYLE]
+surprised expression beginning, eyes widening, eyebrows raising,
+slight backward lean, startled reaction
+```
+Frames 4–6:
 ```
 [BASE STYLE]
 surprised startled expression, eyes wide open, eyebrows raised high,
 small red exclamation mark ! floating above her head,
-one hand raised near face, slight backward lean
+one hand raised near face, alert attentive pose
 ```
-Frames: ! mark appears and pulses, slight flinch backward then forward
+Frames 7–8:
+```
+[BASE STYLE]
+alert attentive expression, eyes wide, ! mark above head,
+leaning slightly forward, ready and waiting pose
+```
 
 ---
 
-#### `sleeping.gif` — animated GIF, 4 frames
+#### `sleeping.gif` — animated GIF, 8 frames
 **Target:** `themes/anya/assets/sleeping.gif`
-**Format:** GIF, 4 frames @ 3fps
-**When used:** Idle for 60+ seconds (sleep mode)
+**Format:** GIF, 8 frames @ 6fps (slower = more peaceful)
+**When used:** Idle for 60+ seconds
 
-**Prompt:**
+| Frame | Description |
+|-------|-------------|
+| 1–2 | Slumped, eyes closed, small zzz |
+| 3–4 | Head bobs slightly down, zzz grows |
+| 5–6 | Head bobs back up, zzz floats higher |
+| 7–8 | Head at rest again, zzz resets small |
+
+**Per-frame prompts:**
+
+Frames 1–2 & 7–8:
 ```
 [BASE STYLE]
 eyes completely closed, slumped drooping posture,
-small white zzz bubble floating upward above head,
-relaxed arms hanging down, soft peaceful expression,
-slightly tilted to one side
+small white zzz bubble near head, relaxed arms hanging,
+soft peaceful sleeping expression, slightly tilted to one side
 ```
-Frames: zzz bubble grows larger and floats upward, head bobs slightly
+Frames 3–4:
+```
+[BASE STYLE]
+eyes completely closed, head drooping slightly lower,
+medium zzz bubble floating upward, deeply asleep pose
+```
+Frames 5–6:
+```
+[BASE STYLE]
+eyes completely closed, head slightly raised from droop,
+larger zzz bubble floating higher above head, peaceful sleeping
+```
 
 ---
 
-#### `waking.gif` — animated GIF, 4 frames
+#### `waking.gif` — animated GIF, 8 frames
 **Target:** `themes/anya/assets/waking.gif`
-**Format:** GIF, 4 frames @ 4fps
-**When used:** Waking from sleep (direct sleep mode — plays when mouse moves)
+**Format:** GIF, 8 frames @ 8fps
+**When used:** Waking from sleep when mouse moves
 
-**Prompt:**
+| Frame | Description |
+|-------|-------------|
+| 1–2 | Still slumped, eyes barely opening |
+| 3–4 | Yawn begins, one arm starting to stretch |
+| 5–6 | Full yawn, arm stretched high |
+| 7 | Yawn closing, blinking awake |
+| 8 | Eyes open, upright, awake |
+
+**Per-frame prompts:**
+
+Frames 1–2:
 ```
 [BASE STYLE]
-eyes half-open drowsy expression, mid-yawn mouth,
-one arm raised in a stretch upward, other hand rubbing eye,
-tired but waking up pose, slight disheveled look
+eyes barely cracked open, still slumped, drowsy sleepy expression,
+just beginning to wake up
 ```
-Frames: yawn opens, stretch arm goes up, eyes open wider, normal posture returns
+Frames 3–4:
+```
+[BASE STYLE]
+mouth open in yawn, eyes half-open, one arm beginning to stretch upward,
+waking up pose, disheveled tired look
+```
+Frames 5–6:
+```
+[BASE STYLE]
+full wide yawn mouth open, one arm fully stretched up high,
+other hand rubbing eye, very tired waking pose
+```
+Frame 7:
+```
+[BASE STYLE]
+yawn finishing, mouth closing, eyes blinking open wider,
+arm lowering from stretch, waking up expression
+```
+Frame 8:
+```
+[BASE STYLE]
+eyes fully open, upright awake posture, slight smile,
+fully awake and alert expression
+```
 
 ---
 
@@ -259,83 +530,151 @@ Frames: yawn opens, stretch arm goes up, eyes open wider, normal posture returns
 
 ---
 
-#### `idle-look.gif` — animated GIF, 6 frames
+#### `idle-look.gif` — animated GIF, 8 frames
 **Target:** `themes/anya/assets/idle-look.gif`
-**Format:** GIF, 6 frames @ 4fps
+**Format:** GIF, 8 frames @ 6fps
 **When used:** Random idle animation (plays occasionally during idle)
 
-**Prompt:**
+| Frame | Description |
+|-------|-------------|
+| 1–2 | Eyes forward, neutral |
+| 3–4 | Eyes and head turning right |
+| 5–6 | Eyes far right, curious |
+| 7–8 | Returning to center |
+
+**Per-frame prompts:**
+
+Frames 1–2:
 ```
 [BASE STYLE]
-curious expression, head turning slowly to look to the right,
-eyes following something off-screen, slight eyebrow raise,
-then returning to forward gaze
+neutral expression, eyes looking directly forward, relaxed idle pose
 ```
-Frames: head and eyes gradually turn right, pause, turn back to center
+Frames 3–4:
+```
+[BASE STYLE]
+curious expression, eyes shifting to the right, slight head turn right,
+eyebrow slightly raised
+```
+Frames 5–6:
+```
+[BASE STYLE]
+curious expression, eyes looking far to the right, head turned right,
+noticing something off-screen
+```
+Frames 7–8:
+```
+[BASE STYLE]
+neutral expression, eyes returning to center, head turning back forward,
+finishing looking to the side
+```
 
 ---
 
-#### `react-drag.gif` — animated GIF, 4 frames
+#### `react-drag.gif` — animated GIF, 8 frames
 **Target:** `themes/anya/assets/react-drag.gif`
-**Format:** GIF, 4 frames @ 8fps
+**Format:** GIF, 8 frames @ 10fps (fast)
 **When used:** User is dragging Anya around the screen
 
-**Prompt:**
+**Per-frame prompts:**
+
+Frames 1, 3, 5, 7 (arms left):
 ```
 [BASE STYLE]
-surprised flailing expression, arms spread out wide,
-eyes wide open in shock, mouth open in a surprised O,
-hair flying upward as if moving fast, being carried pose
+surprised flailing expression, left arm flung out wide, right arm lower,
+eyes wide open in shock, mouth open in surprised O, hair flying upward
 ```
-Frames: arms flail alternately, hair bounces
+Frames 2, 4, 6, 8 (arms right):
+```
+[BASE STYLE]
+surprised flailing expression, right arm flung out wide, left arm lower,
+eyes wide open in shock, mouth open in surprised O, hair flying upward
+```
 
 ---
 
-#### `react-left.gif` — animated GIF, 3 frames
+#### `react-left.gif` — animated GIF, 8 frames
 **Target:** `themes/anya/assets/react-left.gif`
-**Format:** GIF, 3 frames @ 6fps
+**Format:** GIF, 8 frames @ 8fps
 **When used:** Single click on left side
 
-**Prompt:**
+**Per-frame prompts:**
+
+Frames 1–2:
 ```
 [BASE STYLE]
-slightly annoyed poked expression, leaning to the left,
-one eye squinting, small pout, arms at sides stiffened,
-reacting to being tapped on the left
+neutral expression, upright pose
 ```
-Frames: lean left, exaggerated lean, return to center
+Frames 3–5:
+```
+[BASE STYLE]
+slightly annoyed poked expression, leaning strongly to the left,
+one eye squinting, small pout, reacting to being tapped on the left
+```
+Frames 6–8:
+```
+[BASE STYLE]
+mildly annoyed expression, slowly returning upright from left lean,
+small pout fading, recovering from tap
+```
 
 ---
 
-#### `react-right.gif` — animated GIF, 3 frames
+#### `react-right.gif` — animated GIF, 8 frames
 **Target:** `themes/anya/assets/react-right.gif`
-**Format:** GIF, 3 frames @ 6fps
+**Format:** GIF, 8 frames @ 8fps
 **When used:** Single click on right side
 
-**Prompt:**
+**Per-frame prompts:**
+
+Frames 1–2:
 ```
 [BASE STYLE]
-slightly annoyed poked expression, leaning to the right,
-one eye squinting, small pout, arms at sides stiffened,
-reacting to being tapped on the right
+neutral expression, upright pose
 ```
-Frames: lean right, exaggerated lean, return to center
+Frames 3–5:
+```
+[BASE STYLE]
+slightly annoyed poked expression, leaning strongly to the right,
+one eye squinting, small pout, reacting to being tapped on the right
+```
+Frames 6–8:
+```
+[BASE STYLE]
+mildly annoyed expression, slowly returning upright from right lean,
+small pout fading, recovering from tap
+```
 
 ---
 
-#### `react-double.gif` — animated GIF, 5 frames
+#### `react-double.gif` — animated GIF, 8 frames
 **Target:** `themes/anya/assets/react-double.gif`
-**Format:** GIF, 5 frames @ 6fps
+**Format:** GIF, 8 frames @ 8fps
 **When used:** Double-click
 
-**Prompt:**
+**Per-frame prompts:**
+
+Frames 1–2:
 ```
 [BASE STYLE]
-startled dizzy expression from being double-tapped,
-stars or swirls around head, eyes spinning or crossed,
-slight stumble pose, exaggerated reaction
+startled expression, eyes wide, beginning of dizzy reaction from double-tap
 ```
-Frames: initial startle, stars appear, sway left, sway right, recover
+Frames 3–4:
+```
+[BASE STYLE]
+dizzy expression, stars or swirls appearing around head, eyes spinning
+```
+Frames 5–6:
+```
+[BASE STYLE]
+very dizzy expression, swaying to the left, stars fully surrounding head,
+eyes crossed or spinning
+```
+Frames 7–8:
+```
+[BASE STYLE]
+recovering from dizzy, stars fading, slight sway to the right,
+eyes returning to normal, shaking off the double-tap
+```
 
 ---
 
