@@ -32,7 +32,7 @@
 
   "states": {
     "_comment": "Each state can be an array of filenames or an object like { files: [...], fallbackTo: \"attention\" }. SVG, GIF, APNG, WebP, PNG, JPG, JPEG all work. Only eyeTracking.states entries MUST be SVG.",
-    "idle":         ["idle.png"],
+    "idle":         ["idle.gif"],
     "thinking":     ["thinking.gif"],
     "working":      ["typing.gif"],
     "juggling":     ["juggling.gif"],
