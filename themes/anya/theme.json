@@ -5,7 +5,7 @@
   "name": "Anya",
   "author": "chapakook",
   "version": "1.0.0",
-  "description": "A short description of your theme",
+  "description": "Anya Forger from Spy x Family — chibi style",
   "_comment_license": "Optional: if you add a license field, treat it as descriptive metadata only. It should describe assets you own and does not grant rights by itself.",
 
   "viewBox": {
@@ -27,25 +27,12 @@
 
   "eyeTracking": {
     "_comment": "Set enabled:true only for states that really need cursor tracking. Only eyeTracking.states entries must be SVG.",
-    "enabled": true,
-    "states": ["idle"],
-    "eyeRatioX": 0.5,
-    "eyeRatioY": 0.5,
-    "maxOffset": 3,
-    "bodyScale": 0.33,
-    "shadowStretch": 0.15,
-    "shadowShift": 0.3,
-    "ids": {
-      "eyes": "eyes-js",
-      "body": "body-js",
-      "shadow": "shadow-js"
-    },
-    "shadowOrigin": "7.5px 15px"
+    "enabled": false
   },
 
   "states": {
     "_comment": "Each state can be an array of filenames or an object like { files: [...], fallbackTo: \"attention\" }. SVG, GIF, APNG, WebP, PNG, JPG, JPEG all work. Only eyeTracking.states entries MUST be SVG.",
-    "idle":         ["idle-follow.svg"],
+    "idle":         ["idle.png"],
     "thinking":     ["thinking.gif"],
     "working":      ["typing.gif"],
     "juggling":     ["juggling.gif"],
