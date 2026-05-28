@@ -14,6 +14,10 @@ function placeholders(value) {
   return Array.from(String(value).matchAll(/\{[^}]+\}/g), (m) => m[0]).sort();
 }
 
+function regexEscape(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function assertLocaleObjectParity(locales, label) {
   const baseKeys = Object.keys(locales.en).sort();
   for (const lang of SUPPORTED_LANGS) {
@@ -41,17 +45,17 @@ function loadSettingsI18nStrings() {
 }
 
 function loadBubbleStrings() {
-  const source = fs.readFileSync(path.join(ROOT, "src", "bubble.html"), "utf8");
+  const source = fs.readFileSync(path.join(ROOT, "src", "bubble-renderer.js"), "utf8");
   const match = source.match(/const BUBBLE_STRINGS = (\{[\s\S]*?\n\});/);
-  assert.ok(match, "bubble.html should define BUBBLE_STRINGS");
+  assert.ok(match, "bubble-renderer.js should define BUBBLE_STRINGS");
   const context = {};
   vm.runInNewContext(`result = ${match[1]};`, context);
   return context.result;
 }
 
 describe("i18n locales", () => {
-  it("lists Korean and Japanese in supported languages", () => {
-    assert.deepStrictEqual(SUPPORTED_LANGS, ["en", "zh", "ko", "ja"]);
+  it("lists all selectable languages in supported languages", () => {
+    assert.deepStrictEqual(SUPPORTED_LANGS, ["en", "zh", "zh-TW", "ko", "ja"]);
   });
 
   it("keeps all locale keysets aligned with English", () => {
@@ -67,11 +71,15 @@ describe("i18n locales", () => {
   });
 
   it("keeps main-process Settings dialog strings available for every supported language", () => {
-    const source = fs.readFileSync(path.join(ROOT, "src", "main.js"), "utf8");
-    for (const name of [
-      "SOUND_OVERRIDE_DIALOG_STRINGS",
-      "ANIMATION_OVERRIDES_EXPORT_DIALOG_STRINGS",
-      "REMOVE_THEME_DIALOG_STRINGS",
+    const settingsIpcSource = fs.readFileSync(path.join(ROOT, "src", "settings-ipc.js"), "utf8");
+    const animationOverridesSource = fs.readFileSync(
+      path.join(ROOT, "src", "settings-animation-overrides-main.js"),
+      "utf8"
+    );
+    for (const [name, source] of [
+      ["SOUND_OVERRIDE_DIALOG_STRINGS", settingsIpcSource],
+      ["ANIMATION_OVERRIDES_EXPORT_DIALOG_STRINGS", animationOverridesSource],
+      ["REMOVE_THEME_DIALOG_STRINGS", settingsIpcSource],
     ]) {
       const start = source.indexOf(`const ${name} = {`);
       assert.notStrictEqual(start, -1, `missing ${name}`);
@@ -79,7 +87,23 @@ describe("i18n locales", () => {
       assert.notStrictEqual(end, -1, `unterminated ${name}`);
       const block = source.slice(start, end);
       for (const lang of SUPPORTED_LANGS) {
-        assert.match(block, new RegExp(`\\n\\s*${lang}:`), `${name} missing ${lang}`);
+        const escapedLang = regexEscape(lang);
+        assert.match(block, new RegExp(`\\n\\s*(?:"${escapedLang}"|${escapedLang}):`), `${name} missing ${lang}`);
+      }
+    }
+  });
+
+  it("keeps Codex Pet main dialog strings available for every supported language", () => {
+    const source = fs.readFileSync(path.join(ROOT, "src", "codex-pet-main.js"), "utf8");
+    for (const name of ["getImportDialogStrings", "getRemovalDialogStrings"]) {
+      const start = source.indexOf(`function ${name}()`);
+      assert.notStrictEqual(start, -1, `missing ${name}`);
+      const end = source.indexOf("\n  async function", start);
+      assert.notStrictEqual(end, -1, `unterminated ${name}`);
+      const block = source.slice(start, end);
+      for (const lang of SUPPORTED_LANGS) {
+        const escapedLang = regexEscape(lang);
+        assert.match(block, new RegExp(`\\n\\s*(?:"${escapedLang}"|${escapedLang}):`), `${name} missing ${lang}`);
       }
     }
   });

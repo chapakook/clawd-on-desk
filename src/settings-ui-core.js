@@ -25,6 +25,12 @@
     throw new Error("settings-i18n.js failed to load before settings-ui-core.js");
   }
 
+  const animMergeApi = root.ClawdSettingsAnimOverridesMerge || {};
+  const mergePosterCacheIntoAnimationData = animMergeApi.mergePosterCacheIntoAnimationData
+    || ((data) => data);
+  const applyAnimationPosterPayloadToRuntime = animMergeApi.applyAnimationPosterPayload
+    || (() => ({ valid: false, stored: false, applied: false }));
+
   const shortcutApi = root.ClawdShortcutActions || {};
   const SHORTCUT_ACTIONS = shortcutApi.SHORTCUT_ACTIONS || {};
   const SHORTCUT_ACTION_IDS = shortcutApi.SHORTCUT_ACTION_IDS || Object.keys(SHORTCUT_ACTIONS);
@@ -45,6 +51,7 @@
     transientUiState: {
       generalSwitches: new Map(),
       agentSwitches: new Map(),
+      animMapSwitches: new Map(),
       size: {
         draftUi: null,
         dragging: false,
@@ -55,10 +62,17 @@
     mountedControls: {
       generalSwitches: new Map(),
       bubblePolicyControls: new Map(),
+      sessionCleanupControls: new Map(),
       agentSwitches: new Map(),
       agentPermissionModes: new Map(),
+      animMapSwitches: new Map(),
+      animMapReset: null,
+      animOverrideTimingSliders: new Map(),
       bubblePolicySummary: null,
+      sessionHudSummary: null,
+      languagePicker: null,
       size: null,
+      soundSummary: null,
       soundVolume: null,
     },
     shortcutRecordingActionId: null,
@@ -70,7 +84,17 @@
   const runtime = {
     agentMetadata: null,
     themeList: null,
+    codexPetsRefreshPending: false,
+    codexPetZipImportPending: false,
+    userThemeZipImportPending: false,
+    codexPetRemovalPendingThemeId: null,
     animationOverridesData: null,
+    animationOverridesFetchSeq: 0,
+    animationPosterRenderPending: false,
+    animationPosterRenderFlags: null,
+    animationPreviewPosterCache: new Map(),
+    pendingAnimationOverrideEdits: new Map(),
+    nextAnimationOverrideEditSeq: 1,
     animOverridesSubtab: "animations",
     expandedOverrideRowIds: new Set(),
     assetPicker: {
@@ -161,6 +185,12 @@
     const all = state.snapshot && state.snapshot.themeOverrides;
     const map = all && all[themeId];
     if (!map || typeof map !== "object") return false;
+    const hitboxKeys = [];
+    if (map.hitbox && typeof map.hitbox === "object") {
+      for (const group of Object.values(map.hitbox)) {
+        if (group && typeof group === "object") hitboxKeys.push(...Object.keys(group));
+      }
+    }
     const keys = [
       ...(map.states ? Object.keys(map.states) : []),
       ...(map.tiers && map.tiers.workingTiers ? Object.keys(map.tiers.workingTiers) : []),
@@ -168,7 +198,7 @@
       ...(map.timings && map.timings.autoReturn ? Object.keys(map.timings.autoReturn) : []),
       ...(map.idleAnimations ? Object.keys(map.idleAnimations) : []),
       ...(map.reactions ? Object.keys(map.reactions) : []),
-      ...(map.hitbox ? Object.keys(map.hitbox) : []),
+      ...hitboxKeys,
       ...(map.sounds ? Object.keys(map.sounds) : []),
     ];
     return keys.length > 0;
@@ -176,7 +206,7 @@
 
   function t(key) {
     const dict = STRINGS[getLang()] || STRINGS.en || {};
-    return dict[key] || key;
+    return dict[key] || (STRINGS.en && STRINGS.en[key]) || key;
   }
 
   function escapeHtml(s) {
@@ -233,7 +263,7 @@
             showToast(t("toastSaveFailed") + msg, { error: true });
             return;
           }
-          setTransientState({ visualOn: nextVisual, pending: false, seq });
+          clearTransientState(seq);
           setSwitchVisual(sw, nextVisual, { pending: false });
         })
         .catch((err) => {
@@ -285,6 +315,24 @@
     } catch (_) {}
   }
 
+  function createDisclosureChevron(className) {
+    const chevron = document.createElement("span");
+    chevron.className = className;
+    chevron.setAttribute("aria-hidden", "true");
+
+    const createSvgElement = typeof document.createElementNS === "function"
+      ? (tagName) => document.createElementNS("http://www.w3.org/2000/svg", tagName)
+      : (tagName) => document.createElement(tagName);
+    const svg = createSvgElement("svg");
+    svg.setAttribute("viewBox", "0 0 20 20");
+    svg.setAttribute("focusable", "false");
+    const path = createSvgElement("path");
+    path.setAttribute("d", "M8 5l5 5-5 5");
+    svg.appendChild(path);
+    chevron.appendChild(svg);
+    return chevron;
+  }
+
   function buildCollapsibleGroup({
     id,
     title = "",
@@ -309,10 +357,7 @@
     header.setAttribute("role", "button");
     header.setAttribute("tabindex", "0");
 
-    const chevron = document.createElement("span");
-    chevron.className = "collapsible-group-chevron";
-    chevron.textContent = "\u25B8";
-    chevron.setAttribute("aria-hidden", "true");
+    const chevron = createDisclosureChevron("collapsible-group-chevron");
     header.appendChild(chevron);
 
     if (headerContent) {
@@ -350,6 +395,10 @@
 
     function measureCollapsibleBodyHeight() {
       return `${body.scrollHeight}px`;
+    }
+
+    function isGroupConnected() {
+      return !!(document.body && document.body.contains(group));
     }
 
     function setExpandedBodyHeight() {
@@ -391,7 +440,16 @@
       if (!animate) {
         group.classList.toggle("collapsed", collapsed);
         setBodyInteractivity(collapsed);
-        body.style.setProperty("--collapsible-body-height", collapsed ? "0px" : measureCollapsibleBodyHeight());
+        if (collapsed) {
+          body.style.setProperty("--collapsible-body-height", "0px");
+        } else {
+          // Detached groups report scrollHeight=0 in some engines. Keep the
+          // body fully expanded until the post-mount RAF can measure a real height.
+          body.style.setProperty(
+            "--collapsible-body-height",
+            isGroupConnected() ? measureCollapsibleBodyHeight() : "none"
+          );
+        }
         return;
       }
 
@@ -492,19 +550,23 @@
       `<div class="row-control"><div class="switch" role="switch" tabindex="0"></div></div>`;
     row.querySelector(".row-label").textContent = t(labelKey);
     const text = row.querySelector(".row-text");
-    row.querySelector(".row-desc").textContent = t(descKey);
+    const desc = row.querySelector(".row-desc");
+    if (descKey) desc.textContent = t(descKey);
+    else desc.remove();
+    let extraElement = null;
     if (descExtraKey) {
       const extra = document.createElement("span");
-      extra.className = "row-desc";
+      extra.className = "row-desc row-desc-extra";
       extra.textContent = t(descExtraKey);
       text.appendChild(extra);
+      extraElement = extra;
     }
     const sw = row.querySelector(".switch");
     const control = row.querySelector(".row-control");
     const override = state.transientUiState.generalSwitches.get(key);
     const visualOn = override ? override.visualOn : readGeneralSwitchVisual(key, invert);
     setSwitchVisual(sw, visualOn, { pending: override ? override.pending : false });
-    state.mountedControls.generalSwitches.set(key, { element: sw, invert });
+    state.mountedControls.generalSwitches.set(key, { element: sw, invert, row, text, extraElement });
     if (actionButton) {
       const btn = document.createElement("button");
       btn.type = "button";
@@ -517,7 +579,6 @@
       sw.classList.add("disabled");
       sw.setAttribute("aria-disabled", "true");
       sw.tabIndex = -1;
-      return row;
     }
     attachAnimatedSwitch(sw, {
       getCommittedVisual: () => readGeneralSwitchVisual(key, invert),
@@ -555,6 +616,166 @@
     return btn;
   }
 
+  // Generic number-input row used by the Session cleanup group. Mirrors the
+  // bubble-policy seconds-input shape but without a toggle axis: label + desc
+  // + numeric input + localized unit suffix. Debounces commits so typing
+  // doesn't fire a write on every keystroke; reverts on rejection.
+  //
+  // `toDisplay(ms)` maps the stored ms value -> the integer shown in the
+  // input. `fromDisplay(display)` maps the user's input back to ms. The
+  // helper does not enforce the cross-field invariant; that's the
+  // controller's job (`settings-actions.js`).
+  const NUMBER_INPUT_COMMIT_DELAY_MS = 600;
+  function buildNumberInputRow({
+    key,
+    labelKey,
+    descKey,
+    unitKey,
+    toDisplay,
+    fromDisplay,
+    min,
+    max,
+    zeroLabelKey = null,
+    debounceMs = NUMBER_INPUT_COMMIT_DELAY_MS,
+  }) {
+    const row = document.createElement("div");
+    row.className = "row session-cleanup-row";
+    row.innerHTML =
+      `<div class="row-text">` +
+        `<span class="row-label"></span>` +
+        `<span class="row-desc"></span>` +
+      `</div>` +
+      `<div class="row-control session-cleanup-control">` +
+        `<input type="text" class="bubble-policy-seconds session-cleanup-input" inputmode="numeric" />` +
+        `<span class="bubble-policy-unit session-cleanup-unit"></span>` +
+      `</div>`;
+    row.querySelector(".row-label").textContent = t(labelKey);
+    const descNode = row.querySelector(".row-desc");
+    if (descKey) descNode.textContent = t(descKey);
+    else descNode.remove();
+    const input = row.querySelector(".session-cleanup-input");
+    const unit = row.querySelector(".session-cleanup-unit");
+    if (unitKey) unit.textContent = t(unitKey);
+    else unit.remove();
+    input.maxLength = String(max).length + 1;
+
+    function currentStored() {
+      const stored = state.snapshot && state.snapshot[key];
+      return Number.isFinite(stored) ? stored : 0;
+    }
+    function renderValue() {
+      const stored = currentStored();
+      const display = toDisplay(stored);
+      if (stored === 0 && zeroLabelKey) {
+        input.value = t(zeroLabelKey);
+      } else {
+        input.value = String(display);
+      }
+    }
+    renderValue();
+
+    let commitTimer = null;
+    let inFlightDisplay = null;
+    let commitSeq = 0;
+    function clearCommitTimer() {
+      if (commitTimer) {
+        clearTimeout(commitTimer);
+        commitTimer = null;
+      }
+    }
+    function syncFromSnapshot() {
+      if (document.activeElement === input) return;
+      renderValue();
+    }
+    function revert() {
+      renderValue();
+    }
+    function commit(nextStored) {
+      const seq = ++commitSeq;
+      inFlightDisplay = nextStored;
+      return window.settingsAPI.update(key, nextStored).then((result) => {
+        if (seq !== commitSeq) return false;
+        inFlightDisplay = null;
+        if (!result || result.status !== "ok") {
+          const msg = (result && result.message) || "unknown error";
+          showToast(t("toastSaveFailed") + msg, { error: true });
+          revert();
+          return false;
+        }
+        return true;
+      }).catch((err) => {
+        if (seq !== commitSeq) return false;
+        inFlightDisplay = null;
+        showToast(t("toastSaveFailed") + (err && err.message), { error: true });
+        revert();
+        return false;
+      });
+    }
+    function parseInput() {
+      const raw = input.value.trim();
+      if (raw === "" || (zeroLabelKey && raw === t(zeroLabelKey))) {
+        // Treat the localized "Disabled" label as the literal zero.
+        return zeroLabelKey ? 0 : null;
+      }
+      if (!/^[0-9]+(?:\.[0-9]+)?$/.test(raw)) return null;
+      const display = Number(raw);
+      if (!Number.isFinite(display) || display < min || display > max) return null;
+      return display;
+    }
+    function commitFromInput() {
+      const display = parseInput();
+      if (display == null) {
+        showToast(t("toastSaveFailed") + `${min}-${max}`, { error: true });
+        revert();
+        return;
+      }
+      const nextStored = display === 0 ? 0 : fromDisplay(display);
+      if (nextStored === currentStored() || nextStored === inFlightDisplay) {
+        // No change — just re-render so the input matches the stored value.
+        renderValue();
+        return;
+      }
+      void commit(nextStored);
+    }
+    function scheduleCommit() {
+      clearCommitTimer();
+      commitTimer = setTimeout(() => {
+        commitTimer = null;
+        commitFromInput();
+      }, debounceMs);
+    }
+
+    input.addEventListener("focus", () => {
+      // Strip the zero-label so the user types numerics, not localized text.
+      const stored = currentStored();
+      if (stored === 0 && zeroLabelKey) input.value = "0";
+    });
+    input.addEventListener("input", () => {
+      scheduleCommit();
+    });
+    input.addEventListener("blur", () => {
+      clearCommitTimer();
+      commitFromInput();
+    });
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        clearCommitTimer();
+        commitFromInput();
+        input.blur();
+      } else if (ev.key === "Escape") {
+        ev.preventDefault();
+        clearCommitTimer();
+        revert();
+        input.blur();
+      }
+    });
+
+    const handle = { row, input, syncFromSnapshot };
+    state.mountedControls.sessionCleanupControls.set(key, handle);
+    return handle;
+  }
+
   function openExternalSafe(url) {
     if (!url) return;
     if (!window.settingsAPI || typeof window.settingsAPI.openExternal !== "function") return;
@@ -568,6 +789,9 @@
   }
 
   function clearMountedControls() {
+    if (state.mountedControls.languagePicker && typeof state.mountedControls.languagePicker.dispose === "function") {
+      state.mountedControls.languagePicker.dispose();
+    }
     if (state.mountedControls.size && typeof state.mountedControls.size.dispose === "function") {
       Promise.resolve(state.mountedControls.size.dispose()).catch(() => {});
     }
@@ -576,10 +800,17 @@
     }
     state.mountedControls.generalSwitches.clear();
     state.mountedControls.bubblePolicyControls.clear();
+    state.mountedControls.sessionCleanupControls.clear();
     state.mountedControls.agentSwitches.clear();
     state.mountedControls.agentPermissionModes.clear();
+    state.mountedControls.animMapSwitches.clear();
+    state.mountedControls.animMapReset = null;
+    state.mountedControls.animOverrideTimingSliders.clear();
     state.mountedControls.bubblePolicySummary = null;
+    state.mountedControls.sessionHudSummary = null;
+    state.mountedControls.languagePicker = null;
     state.mountedControls.size = null;
+    state.mountedControls.soundSummary = null;
     state.mountedControls.soundVolume = null;
   }
 
@@ -645,18 +876,56 @@
     });
   }
 
+  function emptyAnimationOverridesData() {
+    return { theme: null, assets: [], sections: [], cards: [], sounds: [] };
+  }
+
   function fetchAnimationOverridesData() {
+    const seq = runtime.animationOverridesFetchSeq + 1;
+    runtime.animationOverridesFetchSeq = seq;
     if (!window.settingsAPI || typeof window.settingsAPI.getAnimationOverridesData !== "function") {
-      runtime.animationOverridesData = { theme: null, assets: [], cards: [] };
+      runtime.animationOverridesData = emptyAnimationOverridesData();
       return Promise.resolve(runtime.animationOverridesData);
     }
     return window.settingsAPI.getAnimationOverridesData().then((data) => {
-      runtime.animationOverridesData = data || { theme: null, assets: [], cards: [] };
+      if (seq !== runtime.animationOverridesFetchSeq) return runtime.animationOverridesData;
+      runtime.animationOverridesData = mergePosterCacheIntoAnimationData(
+        data || emptyAnimationOverridesData(),
+        runtime.animationPreviewPosterCache
+      );
       return runtime.animationOverridesData;
     }).catch((err) => {
+      if (seq !== runtime.animationOverridesFetchSeq) return runtime.animationOverridesData;
       console.warn("settings: getAnimationOverridesData failed", err);
-      runtime.animationOverridesData = { theme: null, assets: [], cards: [] };
+      if (!runtime.animationOverridesData) runtime.animationOverridesData = emptyAnimationOverridesData();
       return runtime.animationOverridesData;
+    });
+  }
+
+  function requestAnimationPosterRender({ content = false, modal = false } = {}) {
+    if (!content && !modal) return;
+    runtime.animationPosterRenderFlags = {
+      content: !!(content || (runtime.animationPosterRenderFlags && runtime.animationPosterRenderFlags.content)),
+      modal: !!(modal || (runtime.animationPosterRenderFlags && runtime.animationPosterRenderFlags.modal)),
+    };
+    if (runtime.animationPosterRenderPending) return;
+    runtime.animationPosterRenderPending = true;
+    requestAnimationFrame(() => {
+      const flags = runtime.animationPosterRenderFlags || {};
+      runtime.animationPosterRenderPending = false;
+      runtime.animationPosterRenderFlags = null;
+      requestRender({ content: !!flags.content, modal: !!flags.modal });
+    });
+  }
+
+  function applyAnimationPreviewPoster(payload) {
+    const result = applyAnimationPosterPayloadToRuntime(runtime, payload, {
+      warn: (message, value) => console.warn(message, value),
+    });
+    if (!result || !result.valid || !result.applied) return;
+    requestAnimationPosterRender({
+      content: state.activeTab === "animOverrides" && runtime.animOverridesSubtab === "animations",
+      modal: !!runtime.assetPicker.state,
     });
   }
 
@@ -787,7 +1056,21 @@
     if (state.activeTab === "shortcuts") requestRender({ content: true });
   }
 
+  function clearTransientStateForChanges(changes) {
+    if (!changes || typeof changes !== "object") return;
+    for (const key of Object.keys(changes)) {
+      state.transientUiState.generalSwitches.delete(key);
+    }
+    if (Object.prototype.hasOwnProperty.call(changes, "agents")) {
+      state.transientUiState.agentSwitches.clear();
+    }
+    if (Object.prototype.hasOwnProperty.call(changes, "themeOverrides")) {
+      state.transientUiState.animMapSwitches.clear();
+    }
+  }
+
   function applyChanges(payload) {
+    const previousSnapshot = state.snapshot;
     if (payload && payload.snapshot) {
       state.snapshot = payload.snapshot;
     } else if (payload && payload.changes && state.snapshot) {
@@ -796,10 +1079,49 @@
     if (!state.snapshot) return;
 
     const changes = payload && payload.changes;
+    clearTransientStateForChanges(changes);
     const needsAnimOverridesRefresh = !!(changes && (
       "theme" in changes || "themeVariant" in changes || "themeOverrides" in changes
     ));
-    if (needsAnimOverridesRefresh) runtime.animationOverridesData = null;
+    if (changes && (
+      Object.prototype.hasOwnProperty.call(changes, "theme")
+      || Object.prototype.hasOwnProperty.call(changes, "themeVariant")
+    )) {
+      if (runtime.pendingAnimationOverrideEdits && typeof runtime.pendingAnimationOverrideEdits.clear === "function") {
+        runtime.pendingAnimationOverrideEdits.clear();
+      }
+      if (runtime.pendingWideHitboxOverrideEdits && typeof runtime.pendingWideHitboxOverrideEdits.clear === "function") {
+        runtime.pendingWideHitboxOverrideEdits.clear();
+      }
+      if (runtime.pendingAnimationOverrideResets && typeof runtime.pendingAnimationOverrideResets.clear === "function") {
+        runtime.pendingAnimationOverrideResets.clear();
+      }
+      if (state.mountedControls.animOverrideTimingSliders
+        && typeof state.mountedControls.animOverrideTimingSliders.clear === "function") {
+        state.mountedControls.animOverrideTimingSliders.clear();
+      }
+      if (state.mountedControls.animOverrideWideHitboxToggles
+        && typeof state.mountedControls.animOverrideWideHitboxToggles.clear === "function") {
+        state.mountedControls.animOverrideWideHitboxToggles.clear();
+      }
+      if (state.mountedControls.animOverrideStatusControls
+        && typeof state.mountedControls.animOverrideStatusControls.clear === "function") {
+        state.mountedControls.animOverrideStatusControls.clear();
+      }
+    }
+    const shouldPreserveAnimOverridesData = !!(
+      needsAnimOverridesRefresh
+      && (state.activeTab === "animOverrides" || runtime.assetPicker.state)
+    );
+    if (needsAnimOverridesRefresh && !shouldPreserveAnimOverridesData) {
+      runtime.animationOverridesData = null;
+    }
+
+    const activeTab = tabs[state.activeTab];
+    if (activeTab && typeof activeTab.patchInPlace === "function"
+      && activeTab.patchInPlace(changes, { previousSnapshot, snapshot: state.snapshot })) {
+      return;
+    }
 
     if (changes && "themeOverrides" in changes) {
       if (state.activeTab === "theme") {
@@ -815,8 +1137,10 @@
         });
         return;
       }
-      requestRender({ sidebar: true, content: true });
-      return;
+      if (state.activeTab !== "animMap") {
+        requestRender({ sidebar: true, content: true });
+        return;
+      }
     }
 
     if (needsAnimOverridesRefresh && (state.activeTab === "animOverrides" || runtime.assetPicker.state)) {
@@ -834,10 +1158,6 @@
       }));
     }
 
-    const activeTab = tabs[state.activeTab];
-    if (activeTab && typeof activeTab.patchInPlace === "function" && activeTab.patchInPlace(changes)) {
-      return;
-    }
     requestRender({ sidebar: true, content: true });
   }
 
@@ -862,8 +1182,10 @@
     buildSwitchRow,
     buildSection,
     buildCollapsibleGroup,
+    createDisclosureChevron,
     attachActivation,
     buildShortcutButton,
+    buildNumberInputRow,
     openExternalSafe,
     SIZE_UI_MIN,
     SIZE_UI_MAX,
@@ -902,6 +1224,7 @@
     applyShortcutFailures,
     fetchThemes,
     fetchAnimationOverridesData,
+    applyAnimationPreviewPoster,
     stopAssetPickerPolling,
     closeAssetPicker,
     normalizeAssetPickerSelection,

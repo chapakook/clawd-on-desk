@@ -12,6 +12,36 @@ const EDGE_MARGIN = 8;
 const GAP = 6;
 const MAC_FLOATING_TOPMOST_DELAY_MS = 120;
 
+function requiredDependency(value, name, owner) {
+  if (!value) throw new Error(`${owner} requires ${name}`);
+  return value;
+}
+
+function registerUpdateBubbleIpc(options = {}) {
+  const ipcMain = requiredDependency(options.ipcMain, "ipcMain", "registerUpdateBubbleIpc");
+  const updateBubble = requiredDependency(options.updateBubble, "updateBubble", "registerUpdateBubbleIpc");
+  requiredDependency(updateBubble.handleUpdateBubbleHeight, "updateBubble.handleUpdateBubbleHeight", "registerUpdateBubbleIpc");
+  requiredDependency(updateBubble.handleUpdateBubbleAction, "updateBubble.handleUpdateBubbleAction", "registerUpdateBubbleIpc");
+  const disposers = [];
+
+  function on(channel, listener) {
+    ipcMain.on(channel, listener);
+    disposers.push(() => ipcMain.removeListener(channel, listener));
+  }
+
+  on("update-bubble-height", (event, height) => updateBubble.handleUpdateBubbleHeight(event, height));
+  on("update-bubble-action", (event, actionId) => updateBubble.handleUpdateBubbleAction(event, actionId));
+
+  return {
+    dispose() {
+      while (disposers.length) {
+        const dispose = disposers.pop();
+        dispose();
+      }
+    },
+  };
+}
+
 function deferMacFloatingVisibility(ctx, win) {
   if (!isMac || !win || win.isDestroyed()) return;
   const deferUntil = Date.now() + MAC_FLOATING_TOPMOST_DELAY_MS;
@@ -169,7 +199,7 @@ module.exports = function initUpdateBubble(ctx) {
         const fallback = activePayload && activePayload.defaultAction != null ? activePayload.defaultAction : null;
         const resolver = resolveAction;
         resolveAction = null;
-        resolver(fallback);
+        resolver({ action: fallback, source: "closed" });
       }
     });
 
@@ -227,11 +257,17 @@ module.exports = function initUpdateBubble(ctx) {
     else if (typeof ctx.reapplyMacVisibility === "function") ctx.reapplyMacVisibility();
   }
 
-  function settlePrevious(actionId) {
+  // Resolve the in-flight bubble promise with a tagged result.
+  // source ∈ 'user' | 'autoClose' | 'policy' | 'closed'
+  // Callers that consume the resolved value through awaitBubbleAction()
+  // in updater.js only see `action` (string), preserving the old contract
+  // for non-pending callers. handlePendingVersion reads `source` directly
+  // to gate the per-version dedupe store on real user dismissal.
+  function settlePrevious(action, source = "user") {
     if (!resolveAction) return;
     const resolver = resolveAction;
     resolveAction = null;
-    resolver(actionId);
+    resolver({ action, source });
   }
 
   function clearAutoCloseTimer() {
@@ -249,7 +285,7 @@ module.exports = function initUpdateBubble(ctx) {
     autoCloseTimer = setTimeout(() => {
       autoCloseTimer = null;
       const fallback = payload && payload.defaultAction != null ? payload.defaultAction : null;
-      if (resolveAction) settlePrevious(fallback);
+      if (resolveAction) settlePrevious(fallback, "autoClose");
       hideUpdateBubble();
     }, policy.autoCloseMs);
   }
@@ -265,14 +301,14 @@ module.exports = function initUpdateBubble(ctx) {
     const remainingMs = computeAutoCloseRemainingMs(visibleSince, policy.autoCloseMs, Date.now());
     if (remainingMs <= 0) {
       const fallback = activePayload && activePayload.defaultAction != null ? activePayload.defaultAction : null;
-      if (resolveAction) settlePrevious(fallback);
+      if (resolveAction) settlePrevious(fallback, "autoClose");
       hideUpdateBubble();
       return false;
     }
     autoCloseTimer = setTimeout(() => {
       autoCloseTimer = null;
       const fallback = activePayload && activePayload.defaultAction != null ? activePayload.defaultAction : null;
-      if (resolveAction) settlePrevious(fallback);
+      if (resolveAction) settlePrevious(fallback, "autoClose");
       hideUpdateBubble();
     }, remainingMs);
     return true;
@@ -287,12 +323,12 @@ module.exports = function initUpdateBubble(ctx) {
     }
     clearAutoCloseTimer();
     if (resolveAction) {
-      settlePrevious(fallback);
+      settlePrevious(fallback, "closed");
     }
     activePayload = payload;
     if (!policy.enabled) {
       hideUpdateBubble();
-      return Promise.resolve(fallback);
+      return Promise.resolve({ action: fallback, source: "policy" });
     }
     const win = ensureBubble();
 
@@ -314,7 +350,7 @@ module.exports = function initUpdateBubble(ctx) {
 
     if (!payload.requireAction) {
       resolveAction = null;
-      return Promise.resolve(fallback);
+      return Promise.resolve({ action: fallback, source: "autoClose" });
     }
 
     return new Promise((resolve) => {
@@ -336,7 +372,7 @@ module.exports = function initUpdateBubble(ctx) {
   function hideForPolicy() {
     if (resolveAction) {
       const fallback = activePayload && activePayload.defaultAction != null ? activePayload.defaultAction : null;
-      settlePrevious(fallback);
+      settlePrevious(fallback, "policy");
     }
     hideUpdateBubble();
   }
@@ -345,7 +381,7 @@ module.exports = function initUpdateBubble(ctx) {
     if (!resolveAction) return;
     const resolver = resolveAction;
     resolveAction = null;
-    resolver(actionId);
+    resolver({ action: actionId, source: "user" });
   }
 
   function handleUpdateBubbleAction(event, actionId) {
@@ -367,7 +403,7 @@ module.exports = function initUpdateBubble(ctx) {
   function cleanup() {
     if (hideTimer) clearTimeout(hideTimer);
     clearAutoCloseTimer();
-    settlePrevious(activePayload && activePayload.defaultAction != null ? activePayload.defaultAction : null);
+    settlePrevious(activePayload && activePayload.defaultAction != null ? activePayload.defaultAction : null, "closed");
     if (bubble && !bubble.isDestroyed()) bubble.destroy();
     bubble = null;
   }
@@ -385,6 +421,8 @@ module.exports = function initUpdateBubble(ctx) {
     getBubbleWindow: () => bubble,
   };
 };
+
+module.exports.registerUpdateBubbleIpc = registerUpdateBubbleIpc;
 
 module.exports.__test = {
   computeAutoCloseRemainingMs,

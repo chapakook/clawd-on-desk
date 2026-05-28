@@ -10,7 +10,7 @@ const {
   createSingleRequestHookEventRecorder,
   recordHookEventInBuffer,
   getRecentHookEventsFromBuffer,
-} = initServer.__test;
+} = require("../src/server-hook-events");
 
 function makeFakeHttp() {
   let capturedHandler = null;
@@ -184,6 +184,36 @@ describe("server hook event ringbuffer", () => {
     }]);
   });
 
+  it("forwards preserve_state to state.js without changing hook event recording", async () => {
+    const { api, handler, ctx } = startServer();
+
+    const res = await callHandler(handler, "POST", "/state", {
+      agent_id: "gemini-cli",
+      state: "idle",
+      event: "PreCompress",
+      session_id: "gemini:s1",
+      preserve_state: true,
+    });
+
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(ctx._test.updateSessionCalls.length, 1);
+    assert.strictEqual(ctx._test.updateSessionCalls[0][0], "gemini:s1");
+    assert.strictEqual(ctx._test.updateSessionCalls[0][1], "idle");
+    assert.strictEqual(ctx._test.updateSessionCalls[0][2], "PreCompress");
+    assert.strictEqual(ctx._test.updateSessionCalls[0][3].preserveState, true);
+    assert.deepStrictEqual(api.getRecentHookEvents().map(({ agentId, eventType, route, outcome }) => ({
+      agentId,
+      eventType,
+      route,
+      outcome,
+    })), [{
+      agentId: "gemini-cli",
+      eventType: "PreCompress",
+      route: "state",
+      outcome: "accepted",
+    }]);
+  });
+
   it("records /permission DND gate", async () => {
     const { api, handler } = startServer({ doNotDisturb: true });
 
@@ -225,7 +255,9 @@ describe("server hook event ringbuffer", () => {
   });
 
   it("records Codex native permission mode as accepted HTTP activity", async () => {
-    const { api, handler, ctx } = startServer();
+    const { api, handler, ctx } = startServer({
+      isCodexPermissionInterceptEnabled: () => false,
+    });
 
     const res = await callHandler(handler, "POST", "/permission", {
       agent_id: "codex",
@@ -313,6 +345,23 @@ describe("server hook event ringbuffer", () => {
     assert.strictEqual(events.length, HOOK_EVENT_RING_SIZE_PER_AGENT);
     assert.strictEqual(events[0].eventType, "E7");
     assert.strictEqual(events.at(-1).eventType, `E${HOOK_EVENT_RING_SIZE_PER_AGENT + 6}`);
+  });
+
+  it("filters recent hook events by agent and timestamp and returns copies", () => {
+    const buffer = new Map();
+    recordHookEventInBuffer(buffer, { agent_id: "codex", event: "Old" }, "state", "accepted", { now: () => 10 });
+    recordHookEventInBuffer(buffer, { agent_id: "codex", event: "New" }, "state", "accepted", { now: () => 20 });
+    recordHookEventInBuffer(buffer, { agent_id: "gemini-cli", event: "Other" }, "state", "accepted", { now: () => 30 });
+
+    const events = getRecentHookEventsFromBuffer(buffer, { agentId: "codex", since: 20 });
+
+    assert.deepStrictEqual(events.map(({ agentId, eventType, timestamp }) => ({ agentId, eventType, timestamp })), [{
+      agentId: "codex",
+      eventType: "New",
+      timestamp: 20,
+    }]);
+    events[0].eventType = "mutated";
+    assert.strictEqual(buffer.get("codex")[1].eventType, "New");
   });
 
   it("single-request recorder keeps the first valid route outcome", () => {
