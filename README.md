@@ -33,6 +33,51 @@ Thinking when you prompt, typing when tools run, grooving or juggling for subage
 
 > Supports Windows 11, macOS, and Ubuntu/Linux. Windows releases provide separate x64 and ARM64 installers. Source builds require Node.js. Works with **Claude Code**, **Codex CLI**, **Copilot CLI**, **Gemini CLI**, **Antigravity CLI (agy)**, **Cursor Agent**, **CodeBuddy**, **Kiro CLI**, **Kimi Code CLI (Kimi-CLI)**, **Qwen Code**, **opencode**, **Pi**, **OpenClaw**, and **Hermes Agent**.
 
+---
+
+## 🛡️ Corp-Safe Fork (this branch: `corp-safe`)
+
+This fork is a **company-PC-safe** build of Clawd on Desk. The upstream code is excellent, but a few features ship outbound-network or external-config-mutating code that a corporate security team is likely to flag. This branch keeps only the local desktop pet behavior and the Claude Code integration; everything else is replaced with no-op stubs so the original module API stays intact and the app boots cleanly.
+
+### What changed and why
+
+| Feature | Change | Why |
+|---|---|---|
+| **Telegram approval** (`src/telegram-*.js`) | All 9 modules replaced with no-op stubs | Original code spawned a Go sidecar binary and polled Telegram Bot API, sending AI agent activity (prompts, tool calls, file paths) to a remote chat — **a clear DLP / data-exfiltration risk** in a corporate environment. |
+| **Remote SSH deploy** (`src/remote-ssh-*.js`, `scripts/remote-deploy.sh`) | runtime / deploy / ipc / node-probe stubbed; deploy script removed | One-click SSH command execution to remote servers — risks violating internal server access policy and credential handling rules. |
+| **Auto-updater** (`src/updater.js`) | `electron-updater` wiring removed; menu item disabled | Auto-fetched and installed new code from GitHub Releases / `git pull + npm install`. Disabled so the app never runs unreviewed code; updates require a manual `git pull upstream main` and rebuild. |
+| **Sidecar binary download** (`bin/`, `scripts/fetch-sidecar-binaries.js` etc.) | Directory and 3 scripts deleted; `extraResources` entry removed; `npm start` no longer fetches | Sidecar was only needed by the (now-disabled) Telegram bridge. Removing the download avoids pulling an external Go binary on first run. |
+| **Multi-agent hook auto-registration** (13 `hooks/*-install.js`) | `register*` functions stubbed to return `{ added: 0, updated: 0, skipped: true }` | Upstream silently writes hook entries into `~/.codex/`, `~/.gemini/`, `~/.cursor/`, `~/.copilot/`, `~/.codebuddy/`, `~/.kiro/`, `~/.kimi/`, `~/.qwen/`, `~/.config/opencode/`, `~/.pi/`, `~/.openclaw/`, Hermes' plugin dir, and Antigravity. Stubs mean **only `~/.claude/settings.json` is touched** — the one tool this fork's user actually runs. |
+
+### What still works
+- ✅ Claude Code hook integration (`~/.claude/settings.json` — 15 events registered)
+- ✅ Desktop pet animations, eye tracking, click reactions, mini mode
+- ✅ Local state HTTP server (`127.0.0.1:23333`, localhost only — verified: zero outbound connections in `lsof`)
+- ✅ Themes, settings UI, permission bubbles for Claude Code
+- ✅ Custom themes, Codex Pet zip import (theme sanitizer kept)
+
+### How to update from upstream
+
+```bash
+git fetch upstream
+git log upstream/main --oneline | head -30   # review what changed
+git checkout corp-safe
+git cherry-pick <safe_commit_sha>             # pick specific commits
+# or rebase, resolving conflicts in favor of the stubs:
+git rebase upstream/main
+```
+
+### How to run
+
+```bash
+npm install
+npm start
+```
+
+DMG / installer artifacts are **not** built or distributed for this fork — run from source only. This matches the company-PC use case (no unsigned binary, code stays inspectable).
+
+---
+
 ## Features
 
 ### Multi-Agent Support
