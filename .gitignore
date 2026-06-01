@@ -84,6 +84,7 @@ tools/check_dark.py
 
 # Debug logs
 logs/
+dev.log
 
 # Telegram approval sidecar build artifacts
 bin/cc-connect-clawd/*/cc-connect-clawd
